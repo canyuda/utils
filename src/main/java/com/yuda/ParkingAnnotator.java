@@ -1,0 +1,476 @@
+package com.yuda;
+
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+public class ParkingAnnotator extends JFrame {
+
+    private final String IMG_PATH = "D:\\和著府-地下室平面图.jpg";
+    private final String EXCEL = "D:\\parking.xlsx";
+
+    private final Image bg;
+    private final List<List<Point>> allPolygons = new ArrayList<>();   // 所有已保存车位
+    private final List<String> allNames = new ArrayList<>();            // 对应名称
+    private final List<Point> currentPoints = new ArrayList<>();        // 正在标注的当前车位
+    private final JTextField nameField = new JTextField(10);
+
+    public ParkingAnnotator() throws IOException {
+        super("车位标注器");
+        bg = new ImageIcon(IMG_PATH).getImage();
+
+        loadExcel();   // 启动时读取历史
+
+        // ---------- 画布 ----------
+        JPanel canvas = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                g.drawImage(bg, 0, 0, this);
+
+                // 画历史车位
+                g.setColor(Color.GREEN);
+                for (int i = 0; i < allPolygons.size(); i++) {
+                    drawPoly(g, allPolygons.get(i), false, allNames.get(i));
+                }
+
+                // 画当前正在标注的车位
+                if (!currentPoints.isEmpty()) {
+                    g.setColor(Color.RED);
+                    List<Point> ordered = orderRect(currentPoints);
+                    drawPoly(g, ordered, true, "");
+                }
+
+            }
+
+            @Override
+            public Dimension getPreferredSize() {
+                return new Dimension(bg.getWidth(this), bg.getHeight(this));
+            }
+
+            private void drawPoly(Graphics g, List<Point> ps, boolean isCurrent, String name) {
+                Graphics2D g2 = (Graphics2D) g;
+                g2.setStroke(new BasicStroke(2));
+
+                /* 1. 画大圆点 */
+                g2.setColor(isCurrent ? Color.RED : Color.GREEN);
+                for (Point p : ps) {
+                    g2.fillOval(p.x - 4, p.y - 4, 8, 8);
+                }
+
+                /* 2. 画边线 */
+                for (int i = 1; i < ps.size(); i++) {
+                    Point p1 = ps.get(i - 1);
+                    Point p2 = ps.get(i);
+                    g2.drawLine(p1.x, p1.y, p2.x, p2.y);
+                }
+                if (ps.size() >= 3) {
+                    Polygon polygon = new Polygon();
+                    ps.forEach(pt -> polygon.addPoint(pt.x, pt.y));
+                    g2.draw(polygon);
+                }
+
+                /* 3. 在图形内部居中显示车位名（已完成的车位才有名字） */
+                if (name != null && !name.isEmpty()) {
+                    // 计算多边形的质心作为文字中心
+                    int cx = 0, cy = 0;
+                    for (Point p : ps) {
+                        cx += p.x;
+                        cy += p.y;
+                    }
+                    cx /= ps.size();
+                    cy /= ps.size();
+
+                    FontMetrics fm = g2.getFontMetrics();
+                    int w = fm.stringWidth(name);
+                    int h = fm.getHeight();
+                    g2.setColor(new Color(255, 255, 255, 180));   // 半透明白底
+                    g2.fillRect(cx - w / 2 - 2, cy - h / 2 - 2, w + 4, h + 4);
+
+                    g2.setColor(Color.GREEN);
+                    g2.drawString(name, cx - w / 2, cy + h / 2 - fm.getDescent());
+                }
+            }
+
+            /**
+             * 对 2~4 个点实时按“左上→右上→右下→左下”顺序排列，
+             * 保证连线无交叉。
+             */
+            private List<Point> orderRect(List<Point> src) {
+                int n = src.size();
+                if (n < 2) return new ArrayList<>(src);
+
+                List<Point> pts = new ArrayList<>(src);
+                // 1. 按 y 升序，y 相同按 x 升序
+                pts.sort(Comparator.comparingInt((Point p) -> p.y).thenComparingInt(p -> p.x));
+
+                if (n == 2) return pts;   // 两点无需处理
+
+                // 2. 取最上面两个点再按 x 升序 -> 左上、右上
+                Point topLeft = pts.get(0).x < pts.get(1).x ? pts.get(0) : pts.get(1);
+                Point topRight = pts.get(0).x > pts.get(1).x ? pts.get(0) : pts.get(1);
+
+                // 3. 取最下面两个点再按 x 升序 -> 左下、右下
+                Point botLeft = pts.get(2).x < (n == 4 ? pts.get(3).x : topLeft.x) ? pts.get(2) :
+                        (n == 4 ? pts.get(3) : pts.get(2));
+                Point botRight = pts.get(2).x > (n == 4 ? pts.get(3).x : topRight.x) ? pts.get(2) :
+                        (n == 4 ? pts.get(3) : pts.get(2));
+
+                // 4 点情况
+                if (n == 4) {
+                    List<Point> res = new ArrayList<>();
+                    res.add(topLeft);
+                    res.add(topRight);
+                    res.add(botRight);
+                    res.add(botLeft);
+                    return res;
+                }
+                return pts; // 3 点暂时不处理，不会出现交叉
+            }
+        };
+        canvas.addMouseListener(new MouseAdapter() {
+            public void mousePressed(MouseEvent e) {
+                if (currentPoints.size() >= 4) {
+                    JOptionPane.showMessageDialog(ParkingAnnotator.this, "一次标注最多只能添加4个点");
+                    return;
+                }
+                currentPoints.add(e.getPoint());
+                canvas.repaint();
+            }
+        });
+        canvas.setPreferredSize(new Dimension(bg.getWidth(this), bg.getHeight(this)));
+
+        // ---------- 控制面板 ----------
+        JPanel ctrl = new JPanel();
+        ctrl.setLayout(new BoxLayout(ctrl, BoxLayout.Y_AXIS)); // 使用垂直布局
+        JPanel firstRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        firstRow.add(new JLabel("车位名:"));
+        firstRow.add(nameField);
+        JButton saveBtn = new JButton("保存");
+        firstRow.add(saveBtn);
+
+        JPanel secondRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton undoBtn = new JButton("撤销全部点标注");
+        JButton undoPreBtn = new JButton("撤销上一次点标注");
+        JButton closeBtn = new JButton("关闭");
+        secondRow.add(undoPreBtn);
+        secondRow.add(undoBtn);
+        secondRow.add(closeBtn);
+
+        ctrl.add(firstRow);
+        ctrl.add(secondRow);
+
+        undoPreBtn.addActionListener(e -> {
+            if (!currentPoints.isEmpty()) {
+                currentPoints.remove(currentPoints.size() - 1);
+                canvas.repaint();
+            }
+        });
+
+        undoBtn.addActionListener(e -> {
+            if (!currentPoints.isEmpty()) {
+                currentPoints.clear();
+                canvas.repaint();
+            }
+        });
+
+        saveBtn.addActionListener(e -> {
+            String name = nameField.getText().trim();
+            if (name.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "请输入车位名");
+                return;
+            }
+            if (currentPoints.size() < 3) {
+                JOptionPane.showMessageDialog(this, "至少需要3个点");
+                return;
+            }
+            List<Point> ordered = order4Points(currentPoints);
+            appendExcel(name, ordered);
+            allPolygons.add(new ArrayList<>(ordered));
+            allNames.add(name);
+            currentPoints.clear();
+            nameField.setText("");
+            canvas.repaint();
+        });
+
+        closeBtn.addActionListener(e -> System.exit(0));
+
+        add(ctrl, BorderLayout.NORTH);
+        add(new JScrollPane(canvas), BorderLayout.CENTER);
+        pack();
+        setLocationRelativeTo(null);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+
+        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+        int screenWidth = screenSize.width;
+        int screenHeight = screenSize.height;
+
+        // 2. 计算窗口尺寸为屏幕的二分之一
+        int windowWidth = screenWidth * 2 / 3;
+        int windowHeight = screenHeight * 2 / 3;
+
+        // 3. 设置窗口大小
+        setSize(windowWidth, windowHeight);
+
+        // 4. 将窗口定位在屏幕正中央
+        setLocationRelativeTo(null);
+
+        // 添加组件监听器，在组件显示后调整滚动条位置
+        SwingUtilities.invokeLater(() -> {
+            // 获取滚动面板
+            Component[] components = getContentPane().getComponents();
+            for (Component component : components) {
+                if (component instanceof JScrollPane) {
+                    JScrollPane scrollPane = (JScrollPane) component;
+                    JViewport viewport = scrollPane.getViewport();
+
+                    // 如果已有标注数据，计算最后一条标注信息的位置
+                    if (!allPolygons.isEmpty()) {
+                        SwingUtilities.invokeLater(() -> {
+                            // 获取最后一条标注信息的位置
+                            List<Point> lastPolygon = allPolygons.get(allPolygons.size() - 1);
+                            if (!lastPolygon.isEmpty()) {
+                                // 计算多边形的质心作为定位点
+                                int cx = 0, cy = 0;
+                                for (Point p : lastPolygon) {
+                                    cx += p.x;
+                                    cy += p.y;
+                                }
+                                cx /= lastPolygon.size();
+                                cy /= lastPolygon.size();
+
+                                // 将该点定位到视图的左上角附近
+                                Point target = new Point(Math.max(0, cx - 100), Math.max(0, cy - 100));
+                                viewport.setViewPosition(target);
+                            }
+                        });
+                    }
+                    break;
+                }
+            }
+        });
+    }
+
+    /**
+     * 对 4 个点按顺时针排序，返回新 List（原列表不变）
+     */
+    private List<Point> order4Points(List<Point> src) {
+        if (src.size() != 4) return new ArrayList<>(src); // 非4点直接返回
+
+        // 1. 计算质心
+        int cx = 0, cy = 0;
+        for (Point p : src) {
+            cx += p.x;
+            cy += p.y;
+        }
+        cx /= 4;
+        cy /= 4;
+
+        // 2. 按与质心夹角排序（顺时针）
+        List<Point> list = new ArrayList<>(src);
+        final int fcx = cx, fcy = cy;
+        list.sort((a, b) -> {
+            double da = Math.atan2(a.y - fcy, a.x - fcx);
+            double db = Math.atan2(b.y - fcy, b.x - fcx);
+            return Double.compare(db, da);   // 降序 -> 顺时针
+        });
+        return list;
+    }
+
+    // 修改 loadExcel 方法
+    private void loadExcel() {
+        File f = new File(EXCEL);
+        if (!f.exists()) return;
+        try (FileInputStream in = new FileInputStream(f);
+             Workbook wb = WorkbookFactory.create(in)) {
+            Sheet sheet = wb.getSheetAt(0);
+
+            // 用于跟踪是否有任何行需要更新
+            boolean hasChanges = false;
+            List<RowData> rowDataList = new ArrayList<>();
+
+            // 先读取所有数据
+            for (Row row : sheet) {
+                if (row.getRowNum() == 0) {
+                    // 保存表头
+                    rowDataList.add(new RowData(row.getRowNum(), null, null));
+                    continue; // skip header
+                }
+
+                String name = row.getCell(0).getStringCellValue();
+                List<Point> pts = new ArrayList<>();
+                for (int i = 1; i < row.getLastCellNum(); i++) {
+                    String val = row.getCell(i).getStringCellValue();
+                    if (val == null || val.trim().isEmpty()) continue;
+                    String[] xy = val.replaceAll("[()]", "").split(",");
+                    pts.add(new Point(Integer.parseInt(xy[0].trim()),
+                            Integer.parseInt(xy[1].trim())));
+                }
+
+                // 保存原始数据
+                RowData rowData = new RowData(row.getRowNum(), name, new ArrayList<>(pts));
+                rowDataList.add(rowData);
+
+                // 检查点的顺序并调整为左上、右上、右下、左下
+                if (pts.size() == 4) {
+                    List<Point> reordered = reorderPoints(pts);
+                    // 检查是否需要重新排序
+                    if (!pts.equals(reordered)) {
+                        // 更新数据
+                        allNames.add(name);
+                        allPolygons.add(reordered);
+                        // 标记有改动
+                        hasChanges = true;
+                        // 更新行数据
+                        rowData.points = reordered;
+                    } else {
+                        allNames.add(name);
+                        allPolygons.add(pts);
+                    }
+                } else {
+                    allNames.add(name);
+                    allPolygons.add(pts);
+                }
+            }
+
+            // 如果有改动，将修改后的数据写回Excel
+            if (hasChanges) {
+                try (FileOutputStream out = new FileOutputStream(f)) {
+                    Workbook writeWb = new XSSFWorkbook();
+                    Sheet writeSheet = writeWb.createSheet();
+
+                    // 写入表头
+                    Row headerRow = writeSheet.createRow(0);
+                    headerRow.createCell(0).setCellValue("车位名");
+                    for (int i = 0; i < 20; i++) {
+                        headerRow.createCell(i + 1).setCellValue("点" + (i + 1));
+                    }
+
+                    // 写入数据行
+                    for (RowData rowData : rowDataList) {
+                        if (rowData.rowNum == 0) continue; // 跳过表头
+
+                        Row dataRow = writeSheet.createRow(rowData.rowNum);
+                        dataRow.createCell(0).setCellValue(rowData.name);
+
+                        if (rowData.points != null) {
+                            int idx = 1;
+                            for (Point pt : rowData.points) {
+                                dataRow.createCell(idx++).setCellValue("(" + pt.x + "," + pt.y + ")");
+                            }
+                        }
+                    }
+
+                    writeWb.write(out);
+                    writeWb.close();
+                }
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    // 添加辅助类用于保存行数据
+    private static class RowData {
+        int rowNum;
+        String name;
+        List<Point> points;
+
+        RowData(int rowNum, String name, List<Point> points) {
+            this.rowNum = rowNum;
+            this.name = name;
+            this.points = points;
+        }
+    }
+
+    private List<Point> reorderPoints(List<Point> points) {
+        if (points.size() != 4) return points;
+
+        // 1. 按 y 值排序，找到上方两个点和下方两个点
+        List<Point> sortedByY = new ArrayList<>(points);
+        sortedByY.sort(Comparator.comparingInt(p -> p.y));
+
+        // 2. 上方两个点按 x 值排序，确定左上和右上
+        List<Point> topPoints = new ArrayList<>();
+        topPoints.add(sortedByY.get(0));
+        topPoints.add(sortedByY.get(1));
+        topPoints.sort(Comparator.comparingInt(p -> p.x));
+        Point topLeft = topPoints.get(0);
+        Point topRight = topPoints.get(1);
+
+        // 3. 下方两个点按 x 值排序，确定右下和左下
+        List<Point> bottomPoints = new ArrayList<>();
+        bottomPoints.add(sortedByY.get(2));
+        bottomPoints.add(sortedByY.get(3));
+        bottomPoints.sort(Comparator.comparingInt(p -> p.x));
+        Point bottomRight = bottomPoints.get(1);
+        Point bottomLeft = bottomPoints.get(0);
+
+        // 4. 按照左上、右上、右下、左下顺序返回
+        List<Point> reordered = new ArrayList<>();
+        reordered.add(topLeft);
+        reordered.add(topRight);
+        reordered.add(bottomRight);
+        reordered.add(bottomLeft);
+
+        return reordered;
+    }
+
+    // ---------- Excel 追加 ----------
+    private void appendExcel(String name, List<Point> pts) {
+        File f = new File(EXCEL);
+        Workbook wb;
+        Sheet sheet;
+        try {
+            if (!f.exists()) {            // 新建文件
+                wb = new XSSFWorkbook();
+                sheet = wb.createSheet();
+                Row header = sheet.createRow(0);
+                header.createCell(0).setCellValue("车位名");
+                for (int i = 0; i < 20; i++) header.createCell(i + 1).setCellValue("点" + (i + 1));
+            } else {                      // 追加
+                try (FileInputStream in = new FileInputStream(f)) {
+                    wb = WorkbookFactory.create(in);
+                }
+                sheet = wb.getSheetAt(0);
+            }
+            int last = sheet.getLastRowNum();
+            Row row = sheet.createRow(last + 1);
+            row.createCell(0).setCellValue(name);
+            int idx = 1;
+            for (Point pt : pts) {
+                row.createCell(idx++).setCellValue("(" + pt.x + "," + pt.y + ")");
+            }
+            try (FileOutputStream out = new FileOutputStream(f)) {
+                wb.write(out);
+            }
+            wb.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            try {
+                new ParkingAnnotator().setVisible(true);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+}
