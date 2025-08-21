@@ -9,6 +9,8 @@ import java.awt.event.MouseMotionAdapter;
 public class CanvasMouseHandler {
     private final CanvasPanel canvasPanel;
     private final JScrollPane scrollPane;
+    private static final int DRAG_THRESHOLD = 2; // 拖拽阈值，像素单位
+    private boolean isDragging = false;
 
     public CanvasMouseHandler(CanvasPanel canvasPanel, JScrollPane scrollPane) {
         this.canvasPanel = canvasPanel;
@@ -46,6 +48,7 @@ public class CanvasMouseHandler {
     private void handleMousePress(MouseEvent e) {
         if (SwingUtilities.isRightMouseButton(e)) {
             handleRightMousePress(e);
+            isDragging = false; // 初始化拖拽状态
         } else if (SwingUtilities.isLeftMouseButton(e)) {
             handleLeftMousePress(e);
         }
@@ -78,12 +81,29 @@ public class CanvasMouseHandler {
         if (SwingUtilities.isRightMouseButton(e)) {
             canvasPanel.setDragStartPoint(null);
             canvasPanel.setViewStartPosition(null);
+            isDragging = false; // 重置拖拽状态
         }
     }
 
     private void handleMouseDrag(MouseEvent e) {
         if (SwingUtilities.isRightMouseButton(e)) {
-            handleRightMouseDrag(e);
+            // 检查是否达到拖拽阈值
+            if (!isDragging && canvasPanel.getDragStartPoint() != null) {
+                Point startPoint = canvasPanel.getDragStartPoint();
+                double distance = Math.sqrt(
+                        Math.pow(e.getX() - startPoint.x, 2) +
+                                Math.pow(e.getY() - startPoint.y, 2)
+                );
+
+                if (distance >= DRAG_THRESHOLD) {
+                    isDragging = true;
+                }
+            }
+
+            // 只有在确认拖拽时才执行拖拽逻辑
+            if (isDragging) {
+                handleRightMouseDrag(e);
+            }
         } else if (SwingUtilities.isLeftMouseButton(e)) {
             handleLeftMouseDrag(e);
         }
