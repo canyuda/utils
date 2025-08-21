@@ -29,6 +29,9 @@ public class ParkingAnnotator extends JFrame {
     private final List<Point> currentPoints = new ArrayList<>();        // 正在标注的当前车位
     private final JTextField nameField = new JTextField(10);
 
+    private Point dragStartPoint = null;
+    private Point viewStartPosition = null;
+
     public ParkingAnnotator() throws IOException {
         super("车位标注器");
         bg = new ImageIcon(IMG_PATH).getImage();
@@ -143,30 +146,118 @@ public class ParkingAnnotator extends JFrame {
             }
         };
         canvas.addMouseListener(new MouseAdapter() {
+            @Override
             public void mousePressed(MouseEvent e) {
-                if (currentPoints.size() >= 4) {
-                    JOptionPane.showMessageDialog(ParkingAnnotator.this, "一次标注最多只能添加4个点");
-                    return;
+                // 右键按下 - 准备拖动图片
+                if (SwingUtilities.isRightMouseButton(e)) {
+                    dragStartPoint = e.getPoint();
+
+                    // 记录当前视图位置
+                    Component[] components = getContentPane().getComponents();
+                    for (Component component : components) {
+                        if (component instanceof JScrollPane) {
+                            JScrollPane scrollPane = (JScrollPane) component;
+                            JViewport viewport = scrollPane.getViewport();
+                            viewStartPosition = viewport.getViewPosition();
+                            break;
+                        }
+                    }
                 }
-                currentPoints.add(e.getPoint());
-                canvas.repaint();
+                // 左键按下 - 添加标注点
+                else if (SwingUtilities.isLeftMouseButton(e)) {
+                    if (currentPoints.size() >= 4) {
+                        JOptionPane.showMessageDialog(ParkingAnnotator.this, "一次标注最多只能添加4个点");
+                        return;
+                    }
+                    currentPoints.add(e.getPoint());
+                    canvas.repaint();
+                }
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                // 滚轮点击 - 撤销上一次点标注
+                if (SwingUtilities.isMiddleMouseButton(e)) {
+                    if (!currentPoints.isEmpty()) {
+                        currentPoints.remove(currentPoints.size() - 1);
+                        canvas.repaint();
+                    }
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                // 右键释放 - 结束拖动
+                if (SwingUtilities.isRightMouseButton(e)) {
+                    dragStartPoint = null;
+                    viewStartPosition = null;
+                }
             }
         });
+
+        canvas.addMouseMotionListener(new MouseAdapter() {
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                // 右键拖动 - 拖动图片
+                if (dragStartPoint != null && SwingUtilities.isRightMouseButton(e)) {
+                    // 获取滚动面板
+                    Component[] components = getContentPane().getComponents();
+                    for (Component component : components) {
+                        if (component instanceof JScrollPane) {
+                            JScrollPane scrollPane = (JScrollPane) component;
+                            JViewport viewport = scrollPane.getViewport();
+
+                            // 计算视图位置的变化量
+                            int dx = dragStartPoint.x - e.getX();
+                            int dy = dragStartPoint.y - e.getY();
+
+                            // 计算新的视图位置
+                            int newX = Math.max(0, Math.min(viewStartPosition.x + dx,
+                                    canvas.getWidth() - viewport.getWidth()));
+                            int newY = Math.max(0, Math.min(viewStartPosition.y + dy,
+                                    canvas.getHeight() - viewport.getHeight()));
+
+                            // 设置新的视图位置
+                            viewport.setViewPosition(new Point(newX, newY));
+                            break;
+                        }
+                    }
+                }
+                // 左键拖动 - 更新最后一个点的位置（如果正在标注）
+                else if (SwingUtilities.isLeftMouseButton(e)) {
+                    if (currentPoints.size() >= 4) {
+                        return;
+                    }
+
+                    // 更新最后一个点的位置
+                    if (!currentPoints.isEmpty()) {
+                        currentPoints.set(currentPoints.size() - 1, e.getPoint());
+                        canvas.repaint();
+                    }
+                }
+            }
+        });
+
         canvas.setPreferredSize(new Dimension(bg.getWidth(this), bg.getHeight(this)));
 
         // ---------- 控制面板 ----------
         JPanel ctrl = new JPanel();
         ctrl.setLayout(new BoxLayout(ctrl, BoxLayout.Y_AXIS)); // 使用垂直布局
-        JPanel firstRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        firstRow.add(new JLabel("车位名:"));
-        firstRow.add(nameField);
-        JButton saveBtn = new JButton("保存");
-        firstRow.add(saveBtn);
 
+        JPanel firstRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JPanel secondRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+
+        JLabel label = new JLabel("车位名:");
+        JButton saveBtn = new JButton("保存");
+
         JButton undoBtn = new JButton("撤销全部点标注");
         JButton undoPreBtn = new JButton("撤销上一次点标注");
         JButton closeBtn = new JButton("关闭");
+
+        firstRow.add(label);
+        firstRow.add(nameField);
+        firstRow.add(saveBtn);
+
         secondRow.add(undoPreBtn);
         secondRow.add(undoBtn);
         secondRow.add(closeBtn);
