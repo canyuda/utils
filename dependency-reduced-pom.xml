@@ -50,7 +50,7 @@
               <outfile>${project.build.directory}/ParkingAnnotator.exe</outfile>
               <downloadUrl>http://java.com/download</downloadUrl>
               <classPath>
-                <mainClass>com.yuda.ParkingAnnotator</mainClass>
+                <mainClass>com.yuda.Main</mainClass>
                 <addDependencies>false</addDependencies>
               </classPath>
               <icon>src/main/resources/can.ico</icon>
