@@ -10,7 +10,6 @@ public class ControlPanel extends JPanel {
     private final JButton undoLastButton;
     private final JButton undoAllButton;
     private final JButton closeButton;
-    private final JButton selectFileButton; // 新增选择文件按钮
 
     public ControlPanel() {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
@@ -34,7 +33,6 @@ public class ControlPanel extends JPanel {
         undoLastButton = createStyledButton("撤销上一步", Constants.PRIMARY_COLOR);
         undoAllButton = createStyledButton("撤销全部", new Color(155, 89, 182));
         closeButton = createStyledButton("关闭", Constants.ACCENT_COLOR);
-        selectFileButton = createStyledButton("选择文件", new Color(155, 89, 182)); // 创建选择文件按钮
 
         firstRow.add(new JLabel("车位名:"));
         firstRow.add(nameField);
@@ -42,7 +40,6 @@ public class ControlPanel extends JPanel {
 
         secondRow.add(undoLastButton);
         secondRow.add(undoAllButton);
-        secondRow.add(selectFileButton);
         secondRow.add(closeButton);
     }
 
@@ -103,12 +100,8 @@ public class ControlPanel extends JPanel {
             }
         });
     }
+
     // Action listener registration methods
-
-    public void setupSelectFileButtonListener(ActionListener listener) {
-        selectFileButton.addActionListener(listener);
-    }
-
     public void addSaveActionListener(ActionListener listener) {
         saveButton.addActionListener(listener);
     }

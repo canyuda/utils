@@ -10,13 +10,10 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import java.awt.*;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 
 public class ExcelHandler {
     private final String filePath;
@@ -89,62 +86,6 @@ public class ExcelHandler {
         }
 
         return parkingSpots;
-    }
-
-    /**
-     * 更新Excel中的车位状态
-     * @param roomStatusMap 车位名到状态的映射
-     */
-    public void updateParkingStatus(Map<String, String> roomStatusMap) {
-        try (Workbook workbook = WorkbookFactory.create(new FileInputStream(filePath))) {
-            Sheet sheet = workbook.getSheetAt(0); // 获取第一个工作表
-
-            // 检查是否有"车位状态"列，如果没有则创建
-            Row headerRow = sheet.getRow(0);
-            int statusColumnIndex = -1;
-            for (int i = 0; i < headerRow.getLastCellNum(); i++) {
-                Cell cell = headerRow.getCell(i);
-                if (cell != null && "车位状态".equals(cell.getStringCellValue())) {
-                    statusColumnIndex = i;
-                    break;
-                }
-            }
-
-            // 如果没有"车位状态"列，则在第5列创建(0-based index为4)
-            if (statusColumnIndex == -1) {
-                statusColumnIndex = 4;
-                Cell statusCell = headerRow.createCell(statusColumnIndex);
-                statusCell.setCellValue("车位状态");
-            }
-
-            // 遍历数据行，更新车位状态
-            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
-                Row row = sheet.getRow(i);
-                if (row == null) continue;
-
-                Cell roomCell = row.getCell(0); // 第一列是"车位名"
-                if (roomCell == null) continue;
-
-                String roomName = roomCell.getStringCellValue().trim();
-                String status = roomStatusMap.get(roomName);
-
-                if (status != null) {
-                    Cell statusCell = row.createCell(statusColumnIndex);
-                    statusCell.setCellValue(status);
-                }
-            }
-
-            // 保存修改
-            try (FileOutputStream outputStream = new FileOutputStream(filePath)) {
-                workbook.write(outputStream);
-            }
-
-//
-
-        } catch (IOException e) {
-            e.printStackTrace();
-//
-        }
     }
 
     public void appendParkingSpot(String name, List<Point> points) {

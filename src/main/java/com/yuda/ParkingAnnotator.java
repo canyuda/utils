@@ -1,25 +1,16 @@
 package com.yuda;
 
-import com.alibaba.fastjson2.JSON;
-import com.yuda.parking.Data;
-import com.yuda.parking.HousewindowList;
-import com.yuda.parking.ParkingDTO;
-
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class ParkingAnnotator extends JFrame {
     private String imagePath;
@@ -228,7 +219,6 @@ public class ParkingAnnotator extends JFrame {
         controlPanel.addUndoLastActionListener(new UndoLastAction());
         controlPanel.addUndoAllActionListener(new UndoAllAction());
         controlPanel.addCloseActionListener(e -> System.exit(0));
-        controlPanel.setupSelectFileButtonListener(new SelectFileAction());
     }
 
     private class SaveAction implements ActionListener {
@@ -269,98 +259,4 @@ public class ParkingAnnotator extends JFrame {
             canvasPanel.clearCurrentPoints();
         }
     }
-
-    private class SelectFileAction implements ActionListener {
-        @Override
-        public void actionPerformed(ActionEvent e) {
-            JFileChooser fileChooser = new JFileChooser();
-            fileChooser.setDialogTitle("选择JSON文件");
-
-            // 设置文件过滤器，只显示.json文件
-            fileChooser.setFileFilter(new javax.swing.filechooser.FileFilter() {
-                @Override
-                public boolean accept(File f) {
-                    return f.isDirectory() || f.getName().toLowerCase().endsWith(".json");
-                }
-
-                @Override
-                public String getDescription() {
-                    return "JSON文件 (*.json)";
-                }
-            });
-
-            int returnValue = fileChooser.showOpenDialog(controlPanel);
-            if (returnValue == JFileChooser.APPROVE_OPTION) {
-                File selectedFile = fileChooser.getSelectedFile();
-                try {
-                    // 读取文件内容
-                    String jsonContent = readFileToString(selectedFile);
-
-                    // 解析为ParkingDTO对象
-                    ParkingDTO parkingDTO = JSON.parseObject(jsonContent, ParkingDTO.class);
-
-                    // 获取所需数据
-                    Data data = parkingDTO.getData();
-
-                    List<HousewindowList> houseWindowList = data.getHouseWindow().get(0).getHousewindowList();
-
-                    // 创建车位名到状态的映射
-                    Map<String, String> roomStatusMap = new HashMap<>();
-                    for (HousewindowList item : houseWindowList) {
-                        String room = item.getRoom();
-                        int presaleid = item.getPresaleid();
-                        String status = getStatusByPresaleId(presaleid);
-                        if (status != null) {
-                            roomStatusMap.put(room, status);
-                        }
-                    }
-                    try {
-                        excelHandler.updateParkingStatus(roomStatusMap);
-                        JOptionPane.showMessageDialog(controlPanel, "Excel文件更新成功!");
-                    } catch (Exception ex) {
-                        ex.printStackTrace();
-                        JOptionPane.showMessageDialog(controlPanel, "更新Excel文件失败: " + ex.getMessage());
-                    }
-                } catch (IOException ex) {
-                    ex.printStackTrace();
-                    JOptionPane.showMessageDialog(controlPanel, "文件读取失败: " + ex.getMessage());
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                    JOptionPane.showMessageDialog(controlPanel, "JSON解析失败: " + ex.getMessage());
-                }
-            }
-        }
-
-        private String getStatusByPresaleId(int presaleid) {
-            switch (presaleid) {
-                case 0:
-                    return "未售";
-                case 2:
-                    return "已签约";
-                case 3:
-                    return "已认购";
-                case 8:
-                    return "已备案";
-                default:
-                    return null;
-            }
-        }
-    }
-
-    private static String readFileToString(File file) throws IOException {
-        StringBuilder content = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                content.append(line).append(System.lineSeparator());
-            }
-        }
-        // 移除最后一个换行符
-        if (content.length() > 0) {
-            content.setLength(content.length() - System.lineSeparator().length());
-        }
-        return content.toString();
-    }
-
-
 }
