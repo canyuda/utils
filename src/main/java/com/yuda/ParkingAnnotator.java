@@ -6,7 +6,9 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -14,26 +16,58 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
 public class ParkingAnnotator extends JFrame {
+    private static final Color PRIMARY_COLOR = new Color(52, 152, 219);    // 主色调：蓝色
+    private static final Color SECONDARY_COLOR = new Color(46, 204, 113);  // 辅助色：绿色
+    private static final Color ACCENT_COLOR = new Color(231, 76, 60);      // 强调色：红色
+    private static final Color TEXT_COLOR = new Color(44, 62, 80);         // 文本色：深灰
+    private static final Font DEFAULT_FONT = new Font("Microsoft YaHei", Font.PLAIN, 14);
+    private static final Font BUTTON_FONT = new Font("Microsoft YaHei", Font.BOLD, 14);
+    private String IMG_PATH = "D:\\和著府-地下室平面图\\和著府-地下室平面图.jpg";
+    private String EXCEL = "D:\\和著府-地下室平面图\\和著府-地下室平面图.xlsx";
+    private static final String[] IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "bmp"};
+    private static final String[] EXCEL_EXTENSIONS = {"xls", "xlsx"};
 
-    private final String IMG_PATH = "D:\\和著府-地下室平面图.jpg";
-    private final String EXCEL = "D:\\parking.xlsx";
-
-    private final Image bg;
+    private Image bg;
     private final List<List<Point>> allPolygons = new ArrayList<>();   // 所有已保存车位
     private final List<String> allNames = new ArrayList<>();            // 对应名称
     private final List<Point> currentPoints = new ArrayList<>();        // 正在标注的当前车位
-    private final JTextField nameField = new JTextField(10);
+    private JTextField nameField = null;
 
     private Point dragStartPoint = null;
     private Point viewStartPosition = null;
 
     public ParkingAnnotator() throws IOException {
         super("车位标注器");
+
+        // 设置窗口图标
+        try {
+            setIconImage(ImageIO.read(getClass().getResource("/can.ico")));
+        } catch (Exception e) {
+            // 图标加载失败时不影响主程序
+        }
+
+        // 选择图片文件
+        IMG_PATH = selectFile("请选择图片文件", IMAGE_EXTENSIONS, "图片文件");
+        if (IMG_PATH == null || IMG_PATH.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "未选择图片文件，程序将退出。");
+            System.exit(0);
+            return;
+        }
+
+        // 选择Excel文件
+        EXCEL = selectFile("请选择Excel文件", EXCEL_EXTENSIONS, "Excel文件");
+        if (EXCEL == null || EXCEL.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "未选择Excel文件，程序将退出。");
+            System.exit(0);
+            return;
+        }
+
         bg = new ImageIcon(IMG_PATH).getImage();
 
         loadExcel();   // 启动时读取历史
@@ -67,12 +101,18 @@ public class ParkingAnnotator extends JFrame {
 
             private void drawPoly(Graphics g, List<Point> ps, boolean isCurrent, String name) {
                 Graphics2D g2 = (Graphics2D) g;
-                g2.setStroke(new BasicStroke(2));
+                g2.setStroke(new BasicStroke(2.5f));  // 加粗线条
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);  // 抗锯齿
+
 
                 /* 1. 画大圆点 */
-                g2.setColor(isCurrent ? Color.RED : Color.GREEN);
+                g2.setColor(isCurrent ? ACCENT_COLOR : SECONDARY_COLOR);
                 for (Point p : ps) {
-                    g2.fillOval(p.x - 4, p.y - 4, 8, 8);
+                    g2.fillOval(p.x - 5, p.y - 5, 10, 10);  // 增大圆点
+                    // 添加圆点边框
+                    g2.setColor(Color.WHITE);
+                    g2.drawOval(p.x - 5, p.y - 5, 10, 10);
+                    g2.setColor(isCurrent ? ACCENT_COLOR : SECONDARY_COLOR);
                 }
 
                 /* 2. 画边线 */
@@ -101,10 +141,12 @@ public class ParkingAnnotator extends JFrame {
                     FontMetrics fm = g2.getFontMetrics();
                     int w = fm.stringWidth(name);
                     int h = fm.getHeight();
-                    g2.setColor(new Color(255, 255, 255, 180));   // 半透明白底
+                    g2.setColor(new Color(255, 255, 255, 200));  // 调整透明度
+                    g2.fillRoundRect(cx - w / 2 - 4, cy - h / 2 - 4, w + 8, h + 8, 8, 8);  // 圆角矩形背景
                     g2.fillRect(cx - w / 2 - 2, cy - h / 2 - 2, w + 4, h + 4);
 
-                    g2.setColor(Color.GREEN);
+                    g2.setColor(TEXT_COLOR);  // 使用文本色
+                    g2.setFont(new Font("Microsoft YaHei", Font.BOLD, 14));  // 加粗字体
                     g2.drawString(name, cx - w / 2, cy + h / 2 - fm.getDescent());
                 }
             }
@@ -239,20 +281,47 @@ public class ParkingAnnotator extends JFrame {
         });
 
         canvas.setPreferredSize(new Dimension(bg.getWidth(this), bg.getHeight(this)));
+        // 设置窗口背景
+        getContentPane().setBackground(Color.WHITE);
 
+        // 添加窗口阴影 (Windows平台)
+        try {
+            Class<?> awtUtil = Class.forName("com.sun.awt.AWTUtilities");
+            Method setWindowOpacity = awtUtil.getMethod("setWindowOpacity", Window.class, float.class);
+            setWindowOpacity.invoke(null, this, 0.95f);
+        } catch (Exception e) {
+            // 非Windows平台或不支持时忽略
+        }
         // ---------- 控制面板 ----------
         JPanel ctrl = new JPanel();
         ctrl.setLayout(new BoxLayout(ctrl, BoxLayout.Y_AXIS)); // 使用垂直布局
+        ctrl.setBackground(new Color(245, 247, 250));  // 浅灰背景
+        ctrl.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));  // 内边距
 
-        JPanel firstRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JPanel secondRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel firstRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
+        JPanel secondRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
+        firstRow.setBackground(Color.WHITE);
+        secondRow.setBackground(Color.WHITE);
+        firstRow.setBorder(BorderFactory.createLineBorder(new Color(220, 220, 220)));
+        secondRow.setBorder(BorderFactory.createLineBorder(new Color(220, 220, 220)));
 
         JLabel label = new JLabel("车位名:");
-        JButton saveBtn = new JButton("保存");
+        label.setFont(DEFAULT_FONT);
+        label.setForeground(TEXT_COLOR);
 
-        JButton undoBtn = new JButton("撤销全部点标注");
-        JButton undoPreBtn = new JButton("撤销上一次点标注");
-        JButton closeBtn = new JButton("关闭");
+        // 美化文本框
+        nameField = new JTextField(10);
+        nameField.setFont(DEFAULT_FONT);
+        nameField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(200, 200, 200)),
+                BorderFactory.createEmptyBorder(5, 8, 5, 8)
+        ));
+        nameField.setPreferredSize(new Dimension(120, 32));
+
+        JButton saveBtn = createStyledButton("保存", SECONDARY_COLOR);
+        JButton undoBtn = createStyledButton("撤销全部", new Color(155, 89, 182));
+        JButton undoPreBtn = createStyledButton("撤销上一步", new Color(52, 152, 219));
+        JButton closeBtn = createStyledButton("关闭", ACCENT_COLOR);
 
         firstRow.add(label);
         firstRow.add(nameField);
@@ -354,6 +423,66 @@ public class ParkingAnnotator extends JFrame {
                 }
             }
         });
+    }
+
+    private JButton createStyledButton(String text, Color bgColor) {
+        JButton button = new JButton(text);
+        button.setFont(BUTTON_FONT);
+        button.setBackground(bgColor);
+        button.setForeground(Color.WHITE);
+        button.setFocusPainted(false);  // 移除焦点边框
+        button.setBorder(BorderFactory.createEmptyBorder(8, 16, 8, 16));
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));  // 手型光标
+
+        // 添加悬停效果
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                button.setBackground(bgColor.darker());
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setBackground(bgColor);
+            }
+        });
+
+        return button;
+    }
+
+
+    // 添加文件选择方法
+    private String selectFile(String dialogTitle, String[] extensions, String description) {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle(dialogTitle);
+
+        // 设置文件过滤器
+        FileNameExtensionFilter filter = new FileNameExtensionFilter(
+                description + " (" + String.join(", ", extensions) + ")",
+                extensions
+        );
+        fileChooser.setFileFilter(filter);
+
+        // 设置默认目录为程序所在文件夹
+        // 获取当前类所在的jar文件或class文件的路径
+        try {
+            File currentFile = new File(ParkingAnnotator.class.getProtectionDomain()
+                    .getCodeSource().getLocation().toURI());
+            // 如果是jar文件，获取其所在的目录；如果是class文件，获取其父目录
+            File defaultDir = currentFile.isDirectory() ? currentFile : currentFile.getParentFile();
+            fileChooser.setCurrentDirectory(defaultDir);
+        } catch (Exception e) {
+            // 如果获取失败，则使用用户主目录作为备选
+            fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
+        }
+
+        int result = fileChooser.showOpenDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+            return selectedFile.getAbsolutePath();
+        }
+
+        return null;
     }
 
     /**
