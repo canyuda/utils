@@ -49,5 +49,5 @@ public class Constants {
     // Excel相关常量
     public static final String EXCEL_HEADER_NAME = "车位名";
     public static final String EXCEL_HEADER_POINT_PREFIX = "点";
-    public static final int MAX_EXCEL_POINTS = 20;
+    public static final int MAX_EXCEL_POINTS = 4;
 }
