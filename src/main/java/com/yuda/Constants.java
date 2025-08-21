@@ -38,7 +38,8 @@ public class Constants {
     public static final String ENTER_PARKING_NAME_MSG = "请输入车位名";
     public static final String MIN_POINTS_MSG = "至少需要3个点";
     public static final String MAX_POINTS_MSG = "一次标注最多只能添加4个点";
-
+    public static final String JSON_PARSE_ERROR_MSG = "解析JSON文件失败";
+    public static final String FILE_SELECT_ERROR_MSG = "请选择有效的JSON文件";
     // 标题常量
     public static final String APP_TITLE = "车位标注器";
     public static final String SELECT_IMAGE_TITLE = "请选择图片文件";
@@ -50,4 +51,5 @@ public class Constants {
     public static final String EXCEL_HEADER_NAME = "车位名";
     public static final String EXCEL_HEADER_POINT_PREFIX = "点";
     public static final int MAX_EXCEL_POINTS = 4;
+
 }

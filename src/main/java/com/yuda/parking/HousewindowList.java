@@ -25,7 +25,7 @@ public class HousewindowList {
     private double otherarea;
     private long permitid;
     private String permitno;
-    private long presaleid;
+    private int presaleid;
     private long price;
     private long prjid;
     private String projectname;
