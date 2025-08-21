@@ -52,21 +52,37 @@ public class ParkingAnnotator extends JFrame {
             // 图标加载失败时不影响主程序
         }
 
-        // 选择图片文件
-        IMG_PATH = selectFile("请选择图片文件", IMAGE_EXTENSIONS, "图片文件");
-        if (IMG_PATH == null || IMG_PATH.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "未选择图片文件，程序将退出。");
-            System.exit(0);
-            return;
-        }
+        // ====== 新增自动文件检测逻辑 ======
+        // 获取程序执行路径
+        File currentDir = new File(System.getProperty("user.dir"));
 
-        // 选择Excel文件
-        EXCEL = selectFile("请选择Excel文件", EXCEL_EXTENSIONS, "Excel文件");
-        if (EXCEL == null || EXCEL.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "未选择Excel文件，程序将退出。");
-            System.exit(0);
-            return;
+        // 查找图片文件
+        List<File> imageFiles = findFilesByExtensions(currentDir, IMAGE_EXTENSIONS);
+        // 查找Excel文件
+        List<File> excelFiles = findFilesByExtensions(currentDir, EXCEL_EXTENSIONS);
+
+        // 如果只有一个图片文件和一个Excel文件，则自动选择
+        if (imageFiles.size() == 1 && excelFiles.size() == 1) {
+            IMG_PATH = imageFiles.get(0).getAbsolutePath();
+            EXCEL = excelFiles.get(0).getAbsolutePath();
+        } else {
+            // 选择图片文件
+            IMG_PATH = selectFile("请选择图片文件", IMAGE_EXTENSIONS, "图片文件");
+            if (IMG_PATH == null || IMG_PATH.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "未选择图片文件，程序将退出。");
+                System.exit(0);
+                return;
+            }
+
+            // 选择Excel文件
+            EXCEL = selectFile("请选择Excel文件", EXCEL_EXTENSIONS, "Excel文件");
+            if (EXCEL == null || EXCEL.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "未选择Excel文件，程序将退出。");
+                System.exit(0);
+                return;
+            }
         }
+        // ====== 自动文件检测逻辑结束 ======
 
         bg = new ImageIcon(IMG_PATH).getImage();
 
@@ -423,6 +439,34 @@ public class ParkingAnnotator extends JFrame {
                 }
             }
         });
+    }
+
+    /**
+     * 在指定目录下查找符合扩展名的文件
+     */
+    private List<File> findFilesByExtensions(File directory, String[] extensions) {
+        List<File> result = new ArrayList<>();
+        if (directory == null || !directory.isDirectory()) {
+            return result;
+        }
+
+        File[] files = directory.listFiles();
+        if (files == null) {
+            return result;
+        }
+
+        for (File file : files) {
+            if (file.isFile()) {
+                String fileName = file.getName().toLowerCase();
+                for (String ext : extensions) {
+                    if (fileName.endsWith("." + ext.toLowerCase())) {
+                        result.add(file);
+                        break;
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     private JButton createStyledButton(String text, Color bgColor) {
