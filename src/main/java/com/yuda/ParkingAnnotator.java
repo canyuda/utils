@@ -6,11 +6,14 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+
+import static javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW;
 
 public class ParkingAnnotator extends JFrame {
     private String imagePath;
@@ -32,6 +35,7 @@ public class ParkingAnnotator extends JFrame {
 
         setupComponents();
         setupEventListeners();
+        setupKeyBindings();
         setupWindowProperties();
 
         loadExistingParkingSpots();
@@ -258,5 +262,37 @@ public class ParkingAnnotator extends JFrame {
         public void actionPerformed(ActionEvent e) {
             canvasPanel.clearCurrentPoints();
         }
+    }
+
+    private void setupKeyBindings() {
+        // 为整个窗口添加回车键绑定
+        getRootPane().getInputMap(WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke("ENTER"), "saveAction");
+        getRootPane().getActionMap().put("saveAction", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                new SaveAction().actionPerformed(e);
+            }
+        });
+        // 绑定 Escape 键到关闭操作
+        getRootPane().getInputMap(WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "close");
+        getRootPane().getActionMap().put("close", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                // 显示确认对话框
+                int result = JOptionPane.showConfirmDialog(
+                        ParkingAnnotator.this,
+                        "是否退出?",
+                        "确认退出",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.QUESTION_MESSAGE
+                );
+                // 只有点击"是"才退出程序
+                if (result == JOptionPane.YES_OPTION) {
+                    System.exit(0);
+                }
+            }
+        });
     }
 }
