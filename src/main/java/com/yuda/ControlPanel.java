@@ -34,13 +34,13 @@ public class ControlPanel extends JPanel {
         undoAllButton = createStyledButton("撤销全部", new Color(155, 89, 182));
         closeButton = createStyledButton("关闭", Constants.ACCENT_COLOR);
 
-        firstRow.add(new JLabel("车位名:"));
-        firstRow.add(nameField);
-        firstRow.add(saveButton);
+        secondRow.add(new JLabel("车位名:"));
+        secondRow.add(nameField);
+        secondRow.add(saveButton);
 
-        secondRow.add(undoLastButton);
-        secondRow.add(undoAllButton);
-        secondRow.add(closeButton);
+        firstRow.add(undoLastButton);
+        firstRow.add(undoAllButton);
+        firstRow.add(closeButton);
     }
 
     private JPanel createButtonRow() {
